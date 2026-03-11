@@ -6,48 +6,49 @@ import sys
 import time
 from datetime import datetime
 
-from aiogram import Bot, Dispatcher, types, BaseMiddleware
-from aiogram.filters import Command
-from aiogram.types import BufferedInputFile
+from aiogram import Bot, Dispatcher, types, BaseMiddleware, F
+from aiogram.filters import Command, CommandObject
+from aiogram.types import BufferedInputFile, ChatMemberUpdated
+from aiogram.filters.chat_member_updated import ChatMemberUpdatedFilter, IS_NOT_MEMBER, MEMBER
 from PIL import Image, ImageColor, ImageDraw
 from aiohttp import web
 from dotenv import load_dotenv
 
-# –ó–∞–≥—Ä—É–∂–∞–µ–º –ø–µ—Ä–µ–º–µ–Ω–Ω—ã–µ –∏–∑ .env
+# ß©ß—ß‘ß‚ßÂßÿß—ß÷ßﬁ ß·ß÷ß‚ß÷ßﬁß÷ßﬂßﬂßÌß÷ ß⁄ßŸ .env
 load_dotenv()
 
-# --- –ö–û–ù–§–ò–ì–£–†–ê–¶–ò–Ø ---
+# --- ß¨ß∞ßØß∂ß™ß§ßµß≤ß°ß∏ß™ß¡ ---
 TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 PORT = int(os.getenv("PORT", 10000))
-DEV_NAME = "Czerkl" # –ò–º—è –∞–≤—Ç–æ—Ä–∞ –¥–ª—è –ø—É–±–ª–∏—á–Ω—ã—Ö –∫–æ–º–∞–Ω–¥
+DEV_NAME = "Czerkl"
 
 if not TOKEN or not CHANNEL_ID:
-    logging.critical("–û–®–ò–ë–ö–ê: –ü—Ä–æ–≤–µ—Ä—å BOT_TOKEN –∏ CHANNEL_ID –≤ .env!")
+    logging.critical("ß∞ß∫ß™ß¢ß¨ß°: ß±ß‚ß‡ß”ß÷ß‚ßÓ BOT_TOKEN ß⁄ CHANNEL_ID ß” .env!")
     sys.exit(1)
 
-# –ò–Ω–∏—Ü–∏–∞–ª–∏–∑–∞—Ü–∏—è –±–æ—Ç–∞ –∏ –¥–∏—Å–ø–µ—Ç—á–µ—Ä–∞
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# –ü–∞—Ä–∞–º–µ—Ç—Ä—ã —Ö–æ–ª—Å—Ç–∞ 1024x1024
 CANVAS_SIZE = 1024
 canvas = Image.new('RGB', (CANVAS_SIZE, CANVAS_SIZE), color='white')
-canvas_lock = asyncio.Lock() # –ó–∞—â–∏—Ç–∞ –æ—Ç –æ–¥–Ω–æ–≤—Ä–µ–º–µ–Ω–Ω–æ–≥–æ –¥–æ—Å—Ç—É–ø–∞ –∫ —Ö–æ–ª—Å—Ç—É
+canvas_lock = asyncio.Lock()
 
-# --- –¢–ï–ö–°–¢–û–í–´–ï –ë–õ–û–ö–ò ---
+# ß≥ß‡ßŸß’ß—ß÷ßﬁ ß‡ß“ß‚ß—ß‰ßﬂßÌß€ ßﬁß—ß·ß·ß⁄ßﬂß‘ ßËß”ß÷ß‰ß‡ß” (RGB -> Name) ß’ß›ßÒ ß‹ß‡ßﬁß—ßﬂß’ßÌ /point
+RGB_TO_NAME = {ImageColor.getrgb(name): name for name in ImageColor.colormap}
+
 COMMANDS_LIST = (
-    "üõ† **–ò–Ω—Å—Ç—Ä—É–º–µ–Ω—Ç–∞—Ä–∏–π UnionPB:**\n"
-    "‚Ä¢ `/add —Ü–≤–µ—Ç x y` ‚Äî –ø–æ—Å—Ç–∞–≤–∏—Ç—å —Ç–æ—á–∫—É (–ø–æ–¥–¥–µ—Ä–∂–∏–≤–∞–µ—Ç —Å–ø–∏—Å–æ–∫)\n"
-    "‚Ä¢ `/line —Ü–≤–µ—Ç x1 y1 x2 y2` ‚Äî –ø—Ä–æ–≤–µ—Å—Ç–∏ –ª–∏–Ω–∏—é\n"
-    "‚Ä¢ `/circle —Ü–≤–µ—Ç x y r` ‚Äî –Ω–∞—Ä–∏—Å–æ–≤–∞—Ç—å –∫—Ä—É–≥\n"
-    "‚Ä¢ `/fill —Ü–≤–µ—Ç x1 y1 x2 y2` ‚Äî –∑–∞–ª–∏—Ç—å –ø—Ä—è–º–æ—É–≥–æ–ª—å–Ω–∏–∫\n"
-    "‚Ä¢ `/point x y` ‚Äî —É–∑–Ω–∞—Ç—å —Ü–≤–µ—Ç –≤ –∫–æ–æ—Ä–¥–∏–Ω–∞—Ç–∞—Ö\n"
-    "‚Ä¢ `/zoom x y` ‚Äî —É–≤–µ–ª–∏—á–∏—Ç—å —Å–µ–∫—Ç–æ—Ä 50x50\n"
-    "‚Ä¢ `/view` ‚Äî –ø–æ–∫–∞–∑–∞—Ç—å –≤–µ—Å—å —Ö–æ–ª—Å—Ç"
+    "ï0ï0 <b>ß™ßﬂß„ß‰ß‚ßÂßﬁß÷ßﬂß‰ß—ß‚ß⁄ß€ UnionPB:</b>\n"
+    "Å6¶1 <code>/add ßËß”ß÷ß‰ x y</code> °™ ß·ß‡ß„ß‰ß—ß”ß⁄ß‰ßÓ ß‰ß‡ßÈß‹ßÂ\n"
+    "Å6¶1 <code>/line ßËß”ß÷ß‰ x1 y1 x2 y2</code> °™ ß·ß‚ß‡ß”ß÷ß„ß‰ß⁄ ß›ß⁄ßﬂß⁄ß\n"
+    "Å6¶1 <code>/circle ßËß”ß÷ß‰ x y r</code> °™ ßﬂß—ß‚ß⁄ß„ß‡ß”ß—ß‰ßÓ ß‹ß‚ßÂß‘\n"
+    "Å6¶1 <code>/fill ßËß”ß÷ß‰ x1 y1 x2 y2</code> °™ ßŸß—ß›ß⁄ß‰ßÓ ß·ß‚ßÒßﬁß‡ßÂß‘ß‡ß›ßÓßﬂß⁄ß‹\n"
+    "Å6¶1 <code>/point x y</code> °™ ßÂßŸßﬂß—ß‰ßÓ ßËß”ß÷ß‰ ß” ß‹ß‡ß‡ß‚ß’ß⁄ßﬂß—ß‰ß—ßÁ\n"
+    "Å6¶1 <code>/zoom x y</code> °™ ßÂß”ß÷ß›ß⁄ßÈß⁄ß‰ßÓ ß„ß÷ß‹ß‰ß‡ß‚ 50x50\n"
+    "Å6¶1 <code>/view</code> °™ ß·ß‡ß‹ß—ßŸß—ß‰ßÓ ß”ß÷ß„ßÓ ßÁß‡ß›ß„ß‰"
 )
 
-# --- –ó–ê–©–ò–¢–ê –û–¢ –°–ü–ê–ú–ê (Middleware) ---
+# --- ß©ß°ßªß™ß¥ß° ß∞ß¥ ß≥ß±ß°ßÆß° ---
 class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, limit=0.6):
         self.last_time = {}
@@ -55,98 +56,109 @@ class ThrottlingMiddleware(BaseMiddleware):
         super().__init__()
 
     async def __call__(self, handler, event, data):
+        if not event.from_user: return await handler(event, data)
         uid = event.from_user.id
         if uid in self.last_time and time.time() - self.last_time[uid] < self.limit:
-            return # –ò–≥–Ω–æ—Ä–∏—Ä—É–µ–º —Å–ª–∏—à–∫–æ–º —á–∞—Å—Ç—ã–µ –∑–∞–ø—Ä–æ—Å—ã
+            return 
         self.last_time[uid] = time.time()
         return await handler(event, data)
 
 dp.message.middleware(ThrottlingMiddleware())
 
-# --- –í–°–ü–û–ú–û–ì–ê–¢–ï–õ–¨–ù–´–ï –§–£–ù–ö–¶–ò–ò ---
+# --- ß£ß≥ß±ß∞ßÆß∞ß§ß°ß¥ß¶ß≠ßæßØßΩß¶ ß∂ßµßØß¨ß∏ß™ß™ ---
 
 def fix_y(y_user):
-    """–ò–Ω–≤–µ—Ä—Å–∏—è Y: (0,0) —Å—Ç–∞–Ω–æ–≤–∏—Ç—Å—è –≤–Ω–∏–∑—É —Å–ª–µ–≤–∞"""
     return CANVAS_SIZE - 1 - int(y_user)
 
 def is_valid_color(color):
-    """–ü—Ä–æ–≤–µ—Ä–∫–∞ —Ü–≤–µ—Ç–∞ –Ω–∞ –≤–∞–ª–∏–¥–Ω–æ—Å—Ç—å –¥–ª—è Pillow"""
     try:
-        ImageColor.getrgb(color)
+        ImageColor.getrgb(color.lower())
         return True
     except:
         return False
 
 async def send_canvas_photo(message, caption):
-    """–ë–µ–∑–æ–ø–∞—Å–Ω–∞—è –æ—Ç–ø—Ä–∞–≤–∫–∞ —Ç–µ–∫—É—â–µ–≥–æ —Å–æ—Å—Ç–æ—è–Ω–∏—è —Ö–æ–ª—Å—Ç–∞"""
+    """ß∞ß‰ß·ß‚ß—ß”ß‹ß— ßÁß‡ß›ß„ß‰ß— ß„ ß‰ß÷ß‘ß‡ßﬁ ß·ß‡ß›ßÓßŸß‡ß”ß—ß‰ß÷ß›ßÒ (HTML)"""
     async with canvas_lock:
         with io.BytesIO() as out:
             canvas.save(out, format="PNG")
             out.seek(0)
             photo = BufferedInputFile(out.read(), filename="canvas.png")
-            await message.answer_photo(photo=photo, caption=caption, parse_mode="Markdown")
+            # ß¥ß÷ß‘ ß·ß‡ß›ßÓßŸß‡ß”ß—ß‰ß÷ß›ßÒ ßÈß÷ß‚ß÷ßŸ HTML
+            user_tag = f'<a href="tg://user?id={message.from_user.id}">{message.from_user.full_name}</a>'
+            full_caption = f"{user_tag}, {caption}"
+            await message.answer_photo(photo=photo, caption=full_caption, parse_mode="HTML")
 
-async def backup_to_channel():
-    """–§–æ–Ω–æ–≤—ã–π –±—ç–∫–∞–ø –≤ –∫–∞–Ω–∞–ª"""
+async def backup_to_channel(user_full_name, action_text):
+    """ßµß›ßÂßÈßÍß÷ßﬂßﬂßÌß€ ß“ßÔß‹ß—ß·"""
     try:
         async with canvas_lock:
             with io.BytesIO() as out:
                 canvas.save(out, format="PNG")
                 out.seek(0)
                 file = BufferedInputFile(out.read(), filename="matrix.png")
-                await bot.send_document(
-                    CHANNEL_ID, 
-                    file, 
-                    caption=f"System Snapshot | v3.8 Lux | {datetime.now().strftime('%H:%M:%S')}", 
-                    disable_notification=True
+                time_str = datetime.now().strftime('%M:%H')
+                caption = (
+                    f"Backup\n"
+                    f"ß¿ßŸß÷ß‚: {user_full_name}\n"
+                    f"Data: {time_str}\n"
+                    f"ßπß‰ß‡ ß”ßﬂß÷ß„ ßßŸß÷ß‚: {action_text}"
                 )
+                await bot.send_document(CHANNEL_ID, file, caption=caption, disable_notification=True)
     except Exception as e:
-        logging.error(f"–û—à–∏–±–∫–∞ –±—ç–∫–∞–ø–∞: {e}")
+        logging.error(f"ß∞ßÍß⁄ß“ß‹ß— ß“ßÔß‹ß—ß·ß—: {e}")
 
 async def load_last_canvas():
-    """–ó–∞–≥—Ä—É–∑–∫–∞ –ø–æ—Å–ª–µ–¥–Ω–µ–≥–æ —Ö–æ–ª—Å—Ç–∞ –ø—Ä–∏ –ø–µ—Ä–µ–∑–∞–ø—É—Å–∫–µ —Å–µ—Ä–≤–µ—Ä–∞"""
     global canvas
     try:
-        async for msg in bot.get_chat_history(CHANNEL_ID, limit=10):
+        async for msg in bot.get_chat_history(CHANNEL_ID, limit=20):
             if msg.document and msg.document.file_name == "matrix.png":
                 file_info = await bot.get_file(msg.document.file_id)
                 content = await bot.download_file(file_info.file_path)
                 async with canvas_lock:
                     canvas = Image.open(content).convert('RGB')
-                logging.info("–•–æ–ª—Å—Ç —É—Å–ø–µ—à–Ω–æ –≤–æ—Å—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω.")
+                logging.info("ß∑ß‡ß›ß„ß‰ ßÂß„ß·ß÷ßÍßﬂß‡ ß”ß‡ß„ß„ß‰ß—ßﬂß‡ß”ß›ß÷ßﬂ ß⁄ßŸ ß‡ß“ß›ß—ß‹ß—.")
                 return
     except Exception as e:
-        logging.error(f"–û—à–∏–±–∫–∞ –≤–æ—Å—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–∏—è: {e}")
+        logging.error(f"ß∞ßÍß⁄ß“ß‹ß— ß”ß‡ß„ß„ß‰ß—ßﬂß‡ß”ß›ß÷ßﬂß⁄ßÒ: {e}")
 
-# --- –û–ë–†–ê–ë–û–¢–ß–ò–ö–ò –ö–û–ú–ê–ù–î ---
+# --- ß∞ß¢ß≤ß°ß¢ß∞ß¥ßπß™ß¨ß™ ---
+
+@dp.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=IS_NOT_MEMBER >> MEMBER))
+async def on_joined(event: ChatMemberUpdated):
+    """ß±ß‚ß⁄ß”ß÷ß‰ß„ß‰ß”ß⁄ß÷ ß·ß‚ß⁄ ß’ß‡ß“ß—ß”ß›ß÷ßﬂß⁄ß⁄ ß” ß‘ß‚ßÂß·ß·ßÂ (HTML)"""
+    welcome = (
+        f"î9◊6 <b>UnionPB v3.9 Custom Online</b>\n\n"
+        f"ß±ß‚ß⁄ß”ß÷ß‰! ß¡ °™ ß‚ß—ß„ß·ß‚ß÷ß’ß÷ß›ß÷ßﬂßﬂßÌß€ ß‘ß‚ß—ßÊß⁄ßÈß÷ß„ß‹ß⁄ß€ ß’ß”ß⁄ßÿß‡ß‹.\n"
+        f"ß≤ß⁄ß„ßÂß€ß‰ß÷ ßﬂß— ß‡ß“ßÎß÷ßﬁ ßÁß‡ß›ß„ß‰ß÷ 1024x1024 ß·ß‚ßÒßﬁß‡ ß” ßÔß‰ß‡ßﬁ ßÈß—ß‰ß÷!\n"
+        f"ß±ß‚ß‡ß„ß‰ß‡ ß‰ß÷ß‘ßﬂß⁄ß‰ß÷ ßﬁß÷ßﬂßÒ ß⁄ß›ß⁄ ß⁄ß„ß·ß‡ß›ßÓßŸßÂß€ß‰ß÷ ß‹ß‡ßﬁß—ßﬂß’ßÌ.\n\n"
+        f"{COMMANDS_LIST}"
+    )
+    await bot.send_message(event.chat.id, welcome, parse_mode="HTML")
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    """–ü—Ä–∏–≤–µ—Ç—Å—Ç–≤–∏–µ –∫–∞–∫ –≤ v3.7"""
-    welcome = (
-        f"üíé **UnionPB v3.8 Lux Online**\n\n"
-        f"–ö–æ–æ—Ä–¥–∏–Ω–∞—Ç—ã (0,0) ‚Äî **—Å–Ω–∏–∑—É —Å–ª–µ–≤–∞**.\n"
-        f"–†–∞–∑—Ä–∞–±–æ—Ç—á–∏–∫: `{DEV_NAME}`\n\n"
-    )
-    await message.answer(welcome + COMMANDS_LIST, parse_mode="Markdown")
-
-@dp.message(Command("help"))
-async def cmd_help(message: types.Message):
-    """–°–ø–∏—Å–æ–∫ –∫–æ–º–∞–Ω–¥"""
-    await message.answer(COMMANDS_LIST, parse_mode="Markdown")
+    welcome = f"î9◊6 <b>UnionPB v3.9 Custom</b>\nß¨ß‡ß‡ß‚ß’ß⁄ßﬂß—ß‰ßÌ (0,0) °™ <b>ß„ßﬂß⁄ßŸßÂ ß„ß›ß÷ß”ß—</b>.\n\n"
+    await message.answer(welcome + COMMANDS_LIST, parse_mode="HTML")
 
 @dp.message(Command("add"))
 async def cmd_add(message: types.Message):
-    """–ú–Ω–æ–≥–æ—Å—Ç—Ä–æ—á–Ω–æ–µ –¥–æ–±–∞–≤–ª–µ–Ω–∏–µ —Ç–æ—á–µ–∫ –∏–∑ v3.7"""
     lines = message.text.split('\n')
     success = 0
+    action_log = []
+    
     async with canvas_lock:
         for i, line in enumerate(lines):
             parts = line.split()
-            if i == 0: parts = parts[1:] # –£–±–∏—Ä–∞–µ–º —Å–∞–º—É –∫–æ–º–∞–Ω–¥—É /add
+            if i == 0: 
+                parts = parts[1:]
+                action_log = parts
+            else:
+                action_log.append(f"| {line}")
+
             if len(parts) != 3: continue
             try:
-                color, x, y_raw = parts[0], int(parts[1]), int(parts[2])
+                color, x, y_raw = parts[0].lower(), int(parts[1]), int(parts[2])
                 y = fix_y(y_raw)
                 if 0 <= x < CANVAS_SIZE and 0 <= y < CANVAS_SIZE and is_valid_color(color):
                     canvas.putpixel((x, y), ImageColor.getrgb(color))
@@ -154,52 +166,57 @@ async def cmd_add(message: types.Message):
             except: continue
     
     if success > 0:
-        asyncio.create_task(backup_to_channel())
-        await message.answer(f"‚úÖ –£—Å–ø–µ—à–Ω–æ –Ω–∞–Ω–µ—Å–µ–Ω–æ –ø–∏–∫—Å–µ–ª–µ–π: {success}")
+        clean_action = " ".join(action_log)
+        asyncio.create_task(backup_to_channel(message.from_user.full_name, clean_action))
+        await send_canvas_photo(message, f"Å7º3 ßµß„ß·ß÷ßÍßﬂß‡ ßﬂß—ßﬂß÷ß„ß÷ßﬂß‡ ß·ß⁄ß‹ß„ß÷ß›ß÷ß€: {success}")
     else:
-        await message.answer("‚ùå –û—à–∏–±–∫–∞! –ü—Ä–∏–º–µ—Ä: `/add red 500 500` (–º–æ–∂–Ω–æ —Å–ø–∏—Å–∫–æ–º)")
+        await message.answer(
+            "Å7√4 ß∞ßÍß⁄ß“ß‹ß—! ß™ß„ß·ß‡ß›ßÓßŸßÂß€ ßÊß‡ß‚ßﬁß—ß‰:\n"
+            "<code>red 500 500</code>\n"
+            "(ßﬁß‡ßÿßﬂß‡ ß„ß·ß⁄ß„ß‹ß‡ßﬁ ßÈß÷ß‚ß÷ßŸ ß·ß÷ß‚ß÷ßﬂß‡ß„ ß„ß‰ß‚ß‡ß‹ß⁄)", 
+            parse_mode="HTML"
+        )
 
 @dp.message(Command("line"))
 async def cmd_line(message: types.Message):
-    """–û—Ç—Ä–∏—Å–æ–≤–∫–∞ –ª–∏–Ω–∏–∏"""
     try:
         p = message.text.split()
-        color, x1, y1, x2, y2 = p[1], int(p[2]), int(p[3]), int(p[4]), int(p[5])
-        if not is_valid_color(color): return await message.answer("‚ùå –¶–≤–µ—Ç –Ω–µ –≤–∞–ª–∏–¥–µ–Ω.")
+        color, x1, y1, x2, y2 = p[1].lower(), int(p[2]), int(p[3]), int(p[4]), int(p[5])
+        if not is_valid_color(color): 
+            return await message.answer("Å7√4 ß∏ß”ß÷ß‰ ßﬂß÷ ß”ß—ß›ß⁄ß’ß÷ßﬂ.", parse_mode="HTML")
 
         async with canvas_lock:
             draw = ImageDraw.Draw(canvas)
             draw.line([x1, fix_y(y1), x2, fix_y(y2)], fill=ImageColor.getrgb(color), width=1)
         
-        asyncio.create_task(backup_to_channel())
-        await send_canvas_photo(message, f"üìè –õ–∏–Ω–∏—è ({color}) –≥–æ—Ç–æ–≤–∞.")
+        asyncio.create_task(backup_to_channel(message.from_user.full_name, " ".join(p[1:])))
+        await send_canvas_photo(message, f"î9ﬁ1 ß≠ß⁄ßﬂß⁄ßÒ ({color}) ß‘ß‡ß‰ß‡ß”ß—.")
     except:
-        await message.answer("–ò—Å–ø–æ–ª—å–∑—É–π: `/line color x1 y1 x2 y2`")
+        await message.answer("ß™ß„ß·ß‡ß›ßÓßŸßÂß€: <code>/line color x1 y1 x2 y2</code>", parse_mode="HTML")
 
 @dp.message(Command("circle"))
 async def cmd_circle(message: types.Message):
-    """–û—Ç—Ä–∏—Å–æ–≤–∫–∞ –∫—Ä—É–≥–∞ –∏–∑ v3.7"""
     try:
         p = message.text.split()
-        color, x, y, r = p[1], int(p[2]), int(p[3]), int(p[4])
-        if not is_valid_color(color): return await message.answer("‚ùå –¶–≤–µ—Ç –Ω–µ –≤–∞–ª–∏–¥–µ–Ω.")
+        color, x, y, r = p[1].lower(), int(p[2]), int(p[3]), int(p[4])
+        if not is_valid_color(color): 
+            return await message.answer("Å7√4 ß∏ß”ß÷ß‰ ßﬂß÷ ß”ß—ß›ß⁄ß’ß÷ßﬂ.", parse_mode="HTML")
         
         yp = fix_y(y)
         async with canvas_lock:
             draw = ImageDraw.Draw(canvas)
             draw.ellipse([x-r, yp-r, x+r, yp+r], outline=ImageColor.getrgb(color))
             
-        asyncio.create_task(backup_to_channel())
-        await send_canvas_photo(message, f"‚≠ï –û–∫—Ä—É–∂–Ω–æ—Å—Ç—å ({color}) –æ—Ç—Ä–∏—Å–æ–≤–∞–Ω–∞.")
+        asyncio.create_task(backup_to_channel(message.from_user.full_name, " ".join(p[1:])))
+        await send_canvas_photo(message, f"Å8¨7 ß∞ß‹ß‚ßÂßÿßﬂß‡ß„ß‰ßÓ ({color}) ß‡ß‰ß‚ß⁄ß„ß‡ß”ß—ßﬂß—.")
     except:
-        await message.answer("–ò—Å–ø–æ–ª—å–∑—É–π: `/circle color x y radius`")
+        await message.answer("ß™ß„ß·ß‡ß›ßÓßŸßÂß€: <code>/circle color x y radius</code>", parse_mode="HTML")
 
 @dp.message(Command("fill"))
 async def cmd_fill(message: types.Message):
-    """–ó–∞–ª–∏–≤–∫–∞ –æ–±–ª–∞—Å—Ç–∏"""
     try:
         p = message.text.split()
-        color, x1, y1, x2, y2 = p[1], int(p[2]), int(p[3]), int(p[4]), int(p[5])
+        color, x1, y1, x2, y2 = p[1].lower(), int(p[2]), int(p[3]), int(p[4]), int(p[5])
         
         xmin, xmax = sorted([x1, x2])
         ymin, ymax = sorted([fix_y(y1), fix_y(y2)])
@@ -208,61 +225,62 @@ async def cmd_fill(message: types.Message):
             draw = ImageDraw.Draw(canvas)
             draw.rectangle([xmin, ymin, xmax, ymax], fill=ImageColor.getrgb(color))
         
-        asyncio.create_task(backup_to_channel())
-        await send_canvas_photo(message, f"‚úÖ –û–±–ª–∞—Å—Ç—å –∑–∞–ª–∏—Ç–∞ —Ü–≤–µ—Ç–æ–º {color}.")
+        asyncio.create_task(backup_to_channel(message.from_user.full_name, " ".join(p[1:])))
+        await send_canvas_photo(message, f"Å7º3 ß∞ß“ß›ß—ß„ß‰ßÓ ßŸß—ß›ß⁄ß‰ß— ßËß”ß÷ß‰ß‡ßﬁ {color}.")
     except:
-        await message.answer("–ò—Å–ø–æ–ª—å–∑—É–π: `/fill color x1 y1 x2 y2`")
+        await message.answer("ß™ß„ß·ß‡ß›ßÓßŸßÂß€: <code>/fill color x1 y1 x2 y2</code>", parse_mode="HTML")
 
 @dp.message(Command("point"))
 async def cmd_point(message: types.Message):
-    """–£–∑–Ω–∞—Ç—å —Ü–≤–µ—Ç —Ç–æ—á–∫–∏"""
     try:
-        _, x, y_raw = message.text.split()
-        x, yp = int(x), fix_y(y_raw)
-        color_rgb = canvas.getpixel((x, yp))
-        await message.answer(f"üìç –¶–≤–µ—Ç –≤ ({x}, {y_raw}): `rgb{color_rgb}`", parse_mode="Markdown")
+        parts = message.text.split()
+        x, y_raw = int(parts[1]), int(parts[2])
+        yp = fix_y(y_raw)
+        
+        rgb = canvas.getpixel((x, yp))
+        color_name = RGB_TO_NAME.get(rgb, f"rgb{rgb}")
+        
+        user_tag = f'<a href="tg://user?id={message.from_user.id}">{message.from_user.full_name}</a>'
+        await message.answer(f"î9›9 {user_tag}, ßËß”ß÷ß‰ ß” ({x}, {y_raw}): <code>{color_name}</code>", parse_mode="HTML")
     except:
-        await message.answer("–ò—Å–ø–æ–ª—å–∑—É–π: `/point x y`")
+        await message.answer("ß™ß„ß·ß‡ß›ßÓßŸßÂß€: <code>/point x y</code>", parse_mode="HTML")
 
 @dp.message(Command("zoom"))
 async def cmd_zoom(message: types.Message):
-    """–£–≤–µ–ª–∏—á–µ–Ω–∏–µ —Å–µ–∫—Ç–æ—Ä–∞"""
     try:
-        _, x_in, y_in = message.text.split()
-        x, yp = int(x_in), fix_y(y_in)
+        parts = message.text.split()
+        x_in, y_in = int(parts[1]), int(parts[2])
+        yp = fix_y(y_in)
         
-        # –û–±—Ä–µ–∑–∞–µ–º 100x100 –∏ —É–≤–µ–ª–∏—á–∏–≤–∞–µ–º –¥–æ 500x500
-        box = (max(0, x-50), max(0, yp-50), min(1024, x+50), min(1024, yp+50))
+        box = (max(0, x_in-50), max(0, yp-50), min(1024, x_in+50), min(1024, yp+50))
         zoomed = canvas.crop(box).resize((500, 500), resample=Image.NEAREST)
         
         with io.BytesIO() as out:
             zoomed.save(out, format="PNG")
             out.seek(0)
+            user_tag = f'<a href="tg://user?id={message.from_user.id}">{message.from_user.full_name}</a>'
             await message.answer_photo(
                 photo=BufferedInputFile(out.read(), filename="zoom.png"), 
-                caption=f"üîç –°–µ–∫—Ç–æ—Ä {x_in}:{y_in}"
+                caption=f"î9‰3 {user_tag}, ß„ß÷ß‹ß‰ß‡ß‚ {x_in}:{y_in}",
+                parse_mode="HTML"
             )
     except:
-        await message.answer("–ò—Å–ø–æ–ª—å–∑—É–π: `/zoom x y`")
+        await message.answer("ß™ß„ß·ß‡ß›ßÓßŸßÂß€: <code>/zoom x y</code>", parse_mode="HTML")
 
 @dp.message(Command("view"))
 async def cmd_view(message: types.Message):
-    """–ü–æ–∫–∞–∑–∞—Ç—å –≤–µ—Å—å —Ö–æ–ª—Å—Ç"""
-    await send_canvas_photo(message, f"üñº **UnionPB v3.8 Lux**\nEngine by `{DEV_NAME}`")
+    await send_canvas_photo(message, "ß‰ß÷ß‹ßÂßÎß÷ß÷ ß„ß‡ß„ß‰ß‡ßÒßﬂß⁄ß÷ ß·ß‡ß›ß‡ß‰ßﬂß—.")
 
-# --- –°–ï–†–í–ï–† ---
+# --- ß≥ß¶ß≤ß£ß¶ß≤ ---
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    
-    # HTTP-—Å–µ—Ä–≤–µ—Ä –¥–ª—è Render
     app = web.Application()
     app.router.add_get("/", lambda r: web.Response(text="UnionPB Lux Status: Online"))
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, '0.0.0.0', PORT).start()
 
-    # –ó–∞–≥—Ä—É–∑–∫–∞ –±—ç–∫–∞–ø–∞ –∏ –∑–∞–ø—É—Å–∫
     await load_last_canvas()
     await dp.start_polling(bot)
 
@@ -270,4 +288,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("–û—Å—Ç–∞–Ω–æ–≤–∫–∞ –±–æ—Ç–∞...")
+        logging.info("ß∞ß„ß‰ß—ßﬂß‡ß”ß‹ß— ß“ß‡ß‰ß—...")
