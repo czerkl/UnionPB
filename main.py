@@ -14,17 +14,17 @@ from PIL import Image, ImageColor, ImageDraw
 from aiohttp import web
 from dotenv import load_dotenv
 
-# ���ѧԧ��اѧ֧� ��֧�֧ާ֧ߧߧ��� �ڧ� .env
+# Загружаем переменные из .env
 load_dotenv()
 
-# --- ������������������������ ---
+# --- КОНФИГУРАЦИЯ ---
 TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 PORT = int(os.getenv("PORT", 10000))
 DEV_NAME = "Czerkl"
 
 if not TOKEN or not CHANNEL_ID:
-    logging.critical("������������: �����ӧ֧�� BOT_TOKEN �� CHANNEL_ID �� .env!")
+    logging.critical("ОШИБКА: Проверь BOT_TOKEN и CHANNEL_ID в .env!")
     sys.exit(1)
 
 bot = Bot(token=TOKEN)
@@ -34,21 +34,21 @@ CANVAS_SIZE = 1024
 canvas = Image.new('RGB', (CANVAS_SIZE, CANVAS_SIZE), color='white')
 canvas_lock = asyncio.Lock()
 
-# ����٧էѧ֧� ��ҧ�ѧ�ߧ��� �ާѧ��ڧߧ� ��ӧ֧��� (RGB -> Name) �էݧ� �ܧ�ާѧߧէ� /point
+# Создаем обратный маппинг цветов (RGB -> Name) для команды /point
 RGB_TO_NAME = {ImageColor.getrgb(name): name for name in ImageColor.colormap}
 
 COMMANDS_LIST = (
-    "�0�0 <b>���ߧ����ާ֧ߧ�ѧ�ڧ� UnionPB:</b>\n"
-    "�6�1 <code>/add ��ӧ֧� x y</code> �� �����ѧӧڧ�� ����ܧ�\n"
-    "�6�1 <code>/line ��ӧ֧� x1 y1 x2 y2</code> �� ����ӧ֧��� �ݧڧߧڧ�\n"
-    "�6�1 <code>/circle ��ӧ֧� x y r</code> �� �ߧѧ�ڧ��ӧѧ�� �ܧ���\n"
-    "�6�1 <code>/fill ��ӧ֧� x1 y1 x2 y2</code> �� �٧ѧݧڧ�� ����ާ��ԧ�ݧ�ߧڧ�\n"
-    "�6�1 <code>/point x y</code> �� ��٧ߧѧ�� ��ӧ֧� �� �ܧ���էڧߧѧ�ѧ�\n"
-    "�6�1 <code>/zoom x y</code> �� ��ӧ֧ݧڧ�ڧ�� ��֧ܧ��� 50x50\n"
-    "�6�1 <code>/view</code> �� ���ܧѧ٧ѧ�� �ӧ֧�� ���ݧ��"
+    "🛠 <b>Инструментарий UnionPB:</b>\n"
+    "• <code>/add цвет x y</code> — поставить точку\n"
+    "• <code>/line цвет x1 y1 x2 y2</code> — провести линию\n"
+    "• <code>/circle цвет x y r</code> — нарисовать круг\n"
+    "• <code>/fill цвет x1 y1 x2 y2</code> — залить прямоугольник\n"
+    "• <code>/point x y</code> — узнать цвет в координатах\n"
+    "• <code>/zoom x y</code> — увеличить сектор 50x50\n"
+    "• <code>/view</code> — показать весь холст"
 )
 
-# --- ������������ ���� ���������� ---
+# --- ЗАЩИТА ОТ СПАМА ---
 class ThrottlingMiddleware(BaseMiddleware):
     def __init__(self, limit=0.6):
         self.last_time = {}
@@ -65,7 +65,7 @@ class ThrottlingMiddleware(BaseMiddleware):
 
 dp.message.middleware(ThrottlingMiddleware())
 
-# --- ������������������������������ �������������� ---
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 
 def fix_y(y_user):
     return CANVAS_SIZE - 1 - int(y_user)
@@ -78,19 +78,19 @@ def is_valid_color(color):
         return False
 
 async def send_canvas_photo(message, caption):
-    """������ѧӧܧ� ���ݧ��� �� ��֧ԧ�� ���ݧ�٧�ӧѧ�֧ݧ� (HTML)"""
+    """Отправка холста с тегом пользователя (HTML)"""
     async with canvas_lock:
         with io.BytesIO() as out:
             canvas.save(out, format="PNG")
             out.seek(0)
             photo = BufferedInputFile(out.read(), filename="canvas.png")
-            # ���֧� ���ݧ�٧�ӧѧ�֧ݧ� ��֧�֧� HTML
+            # Тег пользователя через HTML
             user_tag = f'<a href="tg://user?id={message.from_user.id}">{message.from_user.full_name}</a>'
             full_caption = f"{user_tag}, {caption}"
             await message.answer_photo(photo=photo, caption=full_caption, parse_mode="HTML")
 
 async def backup_to_channel(user_full_name, action_text):
-    """���ݧ���֧ߧߧ��� �ҧ�ܧѧ�"""
+    """Улучшенный бэкап"""
     try:
         async with canvas_lock:
             with io.BytesIO() as out:
@@ -100,13 +100,13 @@ async def backup_to_channel(user_full_name, action_text):
                 time_str = datetime.now().strftime('%M:%H')
                 caption = (
                     f"Backup\n"
-                    f"���٧֧�: {user_full_name}\n"
+                    f"Юзер: {user_full_name}\n"
                     f"Data: {time_str}\n"
-                    f"����� �ӧߧ֧� ��٧֧�: {action_text}"
+                    f"Что внес юзер: {action_text}"
                 )
                 await bot.send_document(CHANNEL_ID, file, caption=caption, disable_notification=True)
     except Exception as e:
-        logging.error(f"����ڧҧܧ� �ҧ�ܧѧ��: {e}")
+        logging.error(f"Ошибка бэкапа: {e}")
 
 async def load_last_canvas():
     global canvas
@@ -117,28 +117,28 @@ async def load_last_canvas():
                 content = await bot.download_file(file_info.file_path)
                 async with canvas_lock:
                     canvas = Image.open(content).convert('RGB')
-                logging.info("����ݧ�� ����֧�ߧ� �ӧ����ѧߧ�ӧݧ֧� �ڧ� ��ҧݧѧܧ�.")
+                logging.info("Холст успешно восстановлен из облака.")
                 return
     except Exception as e:
-        logging.error(f"����ڧҧܧ� �ӧ����ѧߧ�ӧݧ֧ߧڧ�: {e}")
+        logging.error(f"Ошибка восстановления: {e}")
 
-# --- ���������������������� ---
+# --- ОБРАБОТЧИКИ ---
 
 @dp.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=IS_NOT_MEMBER >> MEMBER))
 async def on_joined(event: ChatMemberUpdated):
-    """����ڧӧ֧���ӧڧ� ���� �է�ҧѧӧݧ֧ߧڧ� �� �ԧ����� (HTML)"""
+    """Приветствие при добавлении в группу (HTML)"""
     welcome = (
-        f"�9�6 <b>UnionPB v3.9 Custom Online</b>\n\n"
-        f"����ڧӧ֧�! �� �� ��ѧ���֧է֧ݧ֧ߧߧ��� �ԧ�ѧ�ڧ�֧�ܧڧ� �էӧڧا��.\n"
-        f"���ڧ��ۧ�� �ߧ� ��ҧ�֧� ���ݧ��� 1024x1024 ����ާ� �� ����� ��ѧ��!\n"
-        f"�������� ��֧ԧߧڧ�� �ާ֧ߧ� �ڧݧ� �ڧ���ݧ�٧�ۧ�� �ܧ�ާѧߧէ�.\n\n"
+        f"💎 <b>UnionPB v3.9 Custom Online</b>\n\n"
+        f"Привет! Я — распределенный графический движок.\n"
+        f"Рисуйте на общем холсте 1024x1024 прямо в этом чате!\n"
+        f"Просто тегните меня или используйте команды.\n\n"
         f"{COMMANDS_LIST}"
     )
     await bot.send_message(event.chat.id, welcome, parse_mode="HTML")
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    welcome = f"�9�6 <b>UnionPB v3.9 Custom</b>\n������էڧߧѧ�� (0,0) �� <b>��ߧڧ٧� ��ݧ֧ӧ�</b>.\n\n"
+    welcome = f"💎 <b>UnionPB v3.9 Custom</b>\nКоординаты (0,0) — <b>снизу слева</b>.\n\n"
     await message.answer(welcome + COMMANDS_LIST, parse_mode="HTML")
 
 @dp.message(Command("add"))
@@ -168,12 +168,12 @@ async def cmd_add(message: types.Message):
     if success > 0:
         clean_action = " ".join(action_log)
         asyncio.create_task(backup_to_channel(message.from_user.full_name, clean_action))
-        await send_canvas_photo(message, f"�7�3 �����֧�ߧ� �ߧѧߧ֧�֧ߧ� ��ڧܧ�֧ݧ֧�: {success}")
+        await send_canvas_photo(message, f"✅ Успешно нанесено пикселей: {success}")
     else:
         await message.answer(
-            "�7�4 ����ڧҧܧ�! ������ݧ�٧�� ����ާѧ�:\n"
+            "❌ Ошибка! Используй формат:\n"
             "<code>red 500 500</code>\n"
-            "(�ާ�اߧ� ���ڧ�ܧ�� ��֧�֧� ��֧�֧ߧ�� �����ܧ�)", 
+            "(можно списком через перенос строки)", 
             parse_mode="HTML"
         )
 
@@ -183,16 +183,16 @@ async def cmd_line(message: types.Message):
         p = message.text.split()
         color, x1, y1, x2, y2 = p[1].lower(), int(p[2]), int(p[3]), int(p[4]), int(p[5])
         if not is_valid_color(color): 
-            return await message.answer("�7�4 ���ӧ֧� �ߧ� �ӧѧݧڧէ֧�.", parse_mode="HTML")
+            return await message.answer("❌ Цвет не валиден.", parse_mode="HTML")
 
         async with canvas_lock:
             draw = ImageDraw.Draw(canvas)
             draw.line([x1, fix_y(y1), x2, fix_y(y2)], fill=ImageColor.getrgb(color), width=1)
         
         asyncio.create_task(backup_to_channel(message.from_user.full_name, " ".join(p[1:])))
-        await send_canvas_photo(message, f"�9�1 ���ڧߧڧ� ({color}) �ԧ���ӧ�.")
+        await send_canvas_photo(message, f"📏 Линия ({color}) готова.")
     except:
-        await message.answer("������ݧ�٧��: <code>/line color x1 y1 x2 y2</code>", parse_mode="HTML")
+        await message.answer("Используй: <code>/line color x1 y1 x2 y2</code>", parse_mode="HTML")
 
 @dp.message(Command("circle"))
 async def cmd_circle(message: types.Message):
@@ -200,7 +200,7 @@ async def cmd_circle(message: types.Message):
         p = message.text.split()
         color, x, y, r = p[1].lower(), int(p[2]), int(p[3]), int(p[4])
         if not is_valid_color(color): 
-            return await message.answer("�7�4 ���ӧ֧� �ߧ� �ӧѧݧڧէ֧�.", parse_mode="HTML")
+            return await message.answer("❌ Цвет не валиден.", parse_mode="HTML")
         
         yp = fix_y(y)
         async with canvas_lock:
@@ -208,9 +208,9 @@ async def cmd_circle(message: types.Message):
             draw.ellipse([x-r, yp-r, x+r, yp+r], outline=ImageColor.getrgb(color))
             
         asyncio.create_task(backup_to_channel(message.from_user.full_name, " ".join(p[1:])))
-        await send_canvas_photo(message, f"�8�7 ���ܧ��اߧ���� ({color}) ����ڧ��ӧѧߧ�.")
+        await send_canvas_photo(message, f"⭕ Окружность ({color}) отрисована.")
     except:
-        await message.answer("������ݧ�٧��: <code>/circle color x y radius</code>", parse_mode="HTML")
+        await message.answer("Используй: <code>/circle color x y radius</code>", parse_mode="HTML")
 
 @dp.message(Command("fill"))
 async def cmd_fill(message: types.Message):
@@ -226,9 +226,9 @@ async def cmd_fill(message: types.Message):
             draw.rectangle([xmin, ymin, xmax, ymax], fill=ImageColor.getrgb(color))
         
         asyncio.create_task(backup_to_channel(message.from_user.full_name, " ".join(p[1:])))
-        await send_canvas_photo(message, f"�7�3 ���ҧݧѧ��� �٧ѧݧڧ�� ��ӧ֧��� {color}.")
+        await send_canvas_photo(message, f"✅ Область залита цветом {color}.")
     except:
-        await message.answer("������ݧ�٧��: <code>/fill color x1 y1 x2 y2</code>", parse_mode="HTML")
+        await message.answer("Используй: <code>/fill color x1 y1 x2 y2</code>", parse_mode="HTML")
 
 @dp.message(Command("point"))
 async def cmd_point(message: types.Message):
@@ -241,9 +241,9 @@ async def cmd_point(message: types.Message):
         color_name = RGB_TO_NAME.get(rgb, f"rgb{rgb}")
         
         user_tag = f'<a href="tg://user?id={message.from_user.id}">{message.from_user.full_name}</a>'
-        await message.answer(f"�9�9 {user_tag}, ��ӧ֧� �� ({x}, {y_raw}): <code>{color_name}</code>", parse_mode="HTML")
+        await message.answer(f"📍 {user_tag}, цвет в ({x}, {y_raw}): <code>{color_name}</code>", parse_mode="HTML")
     except:
-        await message.answer("������ݧ�٧��: <code>/point x y</code>", parse_mode="HTML")
+        await message.answer("Используй: <code>/point x y</code>", parse_mode="HTML")
 
 @dp.message(Command("zoom"))
 async def cmd_zoom(message: types.Message):
@@ -261,17 +261,17 @@ async def cmd_zoom(message: types.Message):
             user_tag = f'<a href="tg://user?id={message.from_user.id}">{message.from_user.full_name}</a>'
             await message.answer_photo(
                 photo=BufferedInputFile(out.read(), filename="zoom.png"), 
-                caption=f"�9�3 {user_tag}, ��֧ܧ��� {x_in}:{y_in}",
+                caption=f"🔍 {user_tag}, сектор {x_in}:{y_in}",
                 parse_mode="HTML"
             )
     except:
-        await message.answer("������ݧ�٧��: <code>/zoom x y</code>", parse_mode="HTML")
+        await message.answer("Используй: <code>/zoom x y</code>", parse_mode="HTML")
 
 @dp.message(Command("view"))
 async def cmd_view(message: types.Message):
-    await send_canvas_photo(message, "��֧ܧ��֧� �������ߧڧ� ���ݧ��ߧ�.")
+    await send_canvas_photo(message, "текущее состояние полотна.")
 
-# --- ������������ ---
+# --- СЕРВЕР ---
 
 async def main():
     logging.basicConfig(level=logging.INFO)
@@ -288,4 +288,4 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logging.info("�����ѧߧ�ӧܧ� �ҧ���...")
+        logging.info("Остановка бота...")
