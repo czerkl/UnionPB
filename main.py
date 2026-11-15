@@ -30,7 +30,7 @@ if not TOKEN or not CHANNEL_ID:
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-CANVAS_SIZE = 1024
+CANVAS_SIZE = 248
 canvas = Image.new('RGB', (CANVAS_SIZE, CANVAS_SIZE), color='white')
 canvas_lock = asyncio.Lock()
 
@@ -128,9 +128,9 @@ async def load_last_canvas():
 async def on_joined(event: ChatMemberUpdated):
     """Приветствие при добавлении в группу (HTML)"""
     welcome = (
-        f"💎 <b>UnionPB v3.9 Custom Online</b>\n\n"
+        f"💎 <b>UnionPB v3.9 Online</b>\n\n"
         f"Привет! Я — распределенный графический движок.\n"
-        f"Рисуйте на общем холсте 1024x1024 прямо в этом чате!\n"
+        f"Рисуйте на общем холсте 248x248 прямо в этом чате!\n"
         f"Просто тегните меня или используйте команды.\n\n"
         f"{COMMANDS_LIST}"
     )
@@ -138,7 +138,7 @@ async def on_joined(event: ChatMemberUpdated):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    welcome = f"💎 <b>UnionPB v3.9 Custom</b>\nКоординаты (0,0) — <b>снизу слева</b>.\n\n"
+    welcome = f"💎 <b>UnionPB v3.9 </b>\nКоординаты (0,0) — <b>снизу слева</b>.\n\n"
     await message.answer(welcome + COMMANDS_LIST, parse_mode="HTML")
 
 @dp.message(Command("add"))
@@ -252,7 +252,7 @@ async def cmd_zoom(message: types.Message):
         x_in, y_in = int(parts[1]), int(parts[2])
         yp = fix_y(y_in)
         
-        box = (max(0, x_in-50), max(0, yp-50), min(1024, x_in+50), min(1024, yp+50))
+        box = (max(0, x_in-50), max(0, yp-50), min(248, x_in+50), min(248, yp+50))
         zoomed = canvas.crop(box).resize((500, 500), resample=Image.NEAREST)
         
         with io.BytesIO() as out:
